@@ -99,7 +99,10 @@ Resources:
                   - Fn::Sub:
                     - "${ImportedValue}/*"
                     - ImportedValue: !ImportValue
-                      Fn::Sub: "${S3BucketStackName}-S3BucketEportedDataArn"
+                        Fn::Join:
+                          - ''
+                          - - !Ref S3BucketStackName
+                            - '-S3BucketEportedDataArn'
         - PolicyName: DynamoDBRWPolicy
           PolicyDocument:
             Version: '2012-10-17'
