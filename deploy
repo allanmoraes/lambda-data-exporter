@@ -1,0 +1,74 @@
+#!/bin/bash
+
+check()
+{
+    awscheck=$(aws sts get-caller-identity)
+
+    if [ "$?" -ne 0 ]
+    then
+        echo "Something went wrong whit your AWS credentials"
+    else
+        echo -e "Your AWS Account:\n$awscheck"
+        read -p "Dou you want to continue? (yes/no) " answer
+        if [ "$answer" == "no" ]
+        then
+            exit
+        fi
+        echo -e "\n"
+        stackcheck=$(aws cloudformation describe-stacks|grep  "StackName"|grep "Network")
+        if [ "$?" -ne 0 ]
+        then
+            echo "You hate to create the Network Stack first"
+        else
+            echo "Starting..."
+        fi
+    fi
+}
+creates3() 
+{
+    echo -e "\nCreating Stack s3-data-exporter\n"
+    aws cloudformation deploy \
+    --template-file iac/iac-s3.yml \
+    --stack-name s3-data-exporter
+}
+upload-artifact()
+{
+    echo -e "\nUploading Python Code to S3 Bucket\n"
+    cd app
+    zipname="latest-"$(date +'%Y%m%d%H%M%S')
+    echo "S3Key=production/python/$zipname.zip" > ../iac/application.parameter
+    zip -r $zipname.zip lambda_function.py
+    aws s3 cp $zipname.zip s3://lambda-data-exporter/production/python/
+    cd ..
+}
+create-lambda()
+{
+    param=$(cat iac/application.parameter)
+    echo -e "\nCreating Stack lambda-data-exporter\n"
+    aws cloudformation deploy \
+    --capabilities CAPABILITY_NAMED_IAM \
+    --template-file iac/iac-lambda.yml --stack-name lambda-data-exporter \
+    --parameter-overrides $param
+}
+case $1 in
+all)
+    check
+    creates3
+    upload-artifact
+    create-lambda;;
+update-app)
+    check
+    upload-artifact
+    create-lambda;;
+update-s3)
+    creates3;;
+update-lambda-configuration)
+    check
+    create-lambda;;
+*)
+    echo -e "You can use:
+        deploy all: To create the AWS components and deploy the application.\n
+        deploy update-app: To upload and update your application.\n
+        deploy update-s3: To update only the S3 Stack\n
+        deploy update-lambda-configuration: To update only the Lambda Stack\n\t";;
+esac

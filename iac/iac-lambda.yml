@@ -1,0 +1,157 @@
+Description: Create App Env
+
+Parameters:
+  S3BucketStackName:
+    Type: String
+    Default: s3-lambda-data-exporter
+  DynamoDBStackName:
+    Type: String
+    Default: dynamodb-lambda-data-receiver
+  EnvironmentName:
+    Type: String
+    Default: production
+  OwnerTeam:
+    Type: String
+    Default: development
+  Project:
+    Type: String
+    Default: https://github.com/allanmoraes/lambda-data-exporter
+  S3Key:
+    Type: String
+  LambdaFunctionName:
+    Type: String
+    Default: lambda-data-exporter
+  LambdaExecutionRoleName:
+    Type: String
+    Default: lambda-data-exporter-role
+
+Resources:
+  LambdaFunction:
+      Type: AWS::Lambda::Function
+      Properties:
+        FunctionName: !Sub ${EnvironmentName}-${LambdaFunctionName}
+        Handler: lambda_function.lambda_handler
+        Role: !GetAtt LambdaExecutionRole.Arn 
+        Runtime: python3.11
+        Code: 
+          S3Bucket:
+            Fn::ImportValue:
+                  Fn::Sub: "${S3BucketStackName}-S3BucketEporterName"
+          S3Key: !Sub ${S3Key}
+        Environment:
+          Variables:
+            DYNAMODB_TABLE_NAME:
+               Fn::ImportValue:
+                  Fn::Sub: "${DynamoDBStackName}-DataReceiverDynamoDBTableName"
+            S3_BUCKET_NAME:
+               Fn::ImportValue:
+                  Fn::Sub: "${S3BucketStackName}-S3BucketEportedDataName"
+        Timeout: 60
+        MemorySize: 256
+
+        Tags:
+          - Key: Name
+            Value: !Sub ${EnvironmentName}-${LambdaFunctionName}
+          - Key: managedby
+            Value: cloudformation
+          - Key: owner-team
+            Value: !Sub ${OwnerTeam}
+          - Key: project
+            Value: !Sub ${Project}
+  
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref LambdaExecutionRoleName
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: LogsWritePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+        - PolicyName: S3RWPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                  - 's3:ListBucket'
+                  - 's3:PutObject'
+                  - 's3:PutObjectAcl'
+                Resource:
+                  - Fn::ImportValue:
+                      Fn::Sub: "${S3BucketStackName}-S3BucketEporterArn"
+                  - Fn::ImportValue:
+                      Fn::Sub: "${S3BucketStackName}-S3BucketEportedDataArn"
+                  - Fn::Sub:
+                    - "${ImportedValue}/*"
+                    - ImportedValue: !ImportValue
+                      Fn::Sub: "${S3BucketStackName}-S3BucketEportedDataArn"
+        - PolicyName: DynamoDBRWPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'dynamodb:BatchGetItem'
+                  - 'dynamodb:BatchWriteItem'
+                  - 'dynamodb:PutItem' 
+                  - 'dynamodb:DeleteItem'
+                  - 'dynamodb:GetItem'
+                  - 'dynamodb:Scan'
+                  - 'dynamodb:Query'
+                  - 'dynamodb:UpdateItem'
+                Resource:
+                  - Fn::ImportValue:
+                      Fn::Sub: "${DynamoDBStackName}-DataReceiverDynamoDBTableARN"
+      Tags:
+        - Key: managedby
+          Value: cloudformation
+        - Key: owner-team
+          Value: !Sub ${OwnerTeam}
+        - Key: project
+          Value: !Sub ${Project}
+
+  EventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub ${EnvironmentName}-${LambdaFunctionName}-weekly
+      ScheduleExpression: cron(00 01 ? * SAT *)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt LambdaFunction.Arn
+          Id: LambdaTarget
+
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref LambdaFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt EventRule.Arn
+
+Outputs:
+  LambdaFunctionName:
+    Description: 'Lambda Function name'
+    Value: !Ref LambdaFunction
+    Export:
+      Name: "lambda-data-exporter-LambdaFunctionName"
+
+  LambdaFunctionArn:
+    Description: 'Lambda Function ARN'
+    Value: !GetAtt LambdaFunction.Arn
+    Export:
+      Name: "lambda-data-exporter-LambdaFunctionArn"

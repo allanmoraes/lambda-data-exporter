@@ -1,0 +1,47 @@
+Description: Create S3 Bucket
+
+Parameters:
+  S3BucketEporterName:
+    Type: String
+    Default: lambda-data-exporter
+
+  S3BucketDataName:
+    Type: String
+    Default: lambda-exported-data
+
+Resources:
+  S3BucketEporter:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref S3BucketEporterName
+
+  S3BucketEportedData:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref S3BucketDataName
+
+
+Outputs:
+  S3BucketEporterName:
+    Description: A reference to the created S3 Bucket
+    Value: !Ref S3BucketEporter
+    Export:
+      Name: 's3-lambda-data-exporter-S3BucketEporterName'
+
+  S3BucketEporterArn:
+    Description: A reference to the created S3 Bucket
+    Value: !GetAtt S3BucketEporter.Arn
+    Export:
+      Name: 's3-lambda-data-exporter-S3BucketEporterArn'
+
+  S3BucketEportedDataName:
+    Description: A reference to the created S3 Bucket
+    Value: !Ref S3BucketEportedData
+    Export:
+      Name: 's3-lambda-data-exporter-S3BucketEportedDataName'
+
+  S3BucketEportedDataArn:
+    Description: A reference to the created S3 Bucket
+    Value: !GetAtt S3BucketEportedData.Arn
+    Export:
+      Name: 's3-lambda-data-exporter-S3BucketEportedDataArn'
